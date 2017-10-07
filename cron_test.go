@@ -289,6 +289,21 @@ func TestJob(t *testing.T) {
 	cron.AddJob("0 0 0 1 1 ?", testJob{wg, "job1"})
 	cron.AddJob("* * * * * ?", testJob{wg, "job2"})
 	cron.AddJob("1 0 0 1 1 ?", testJob{wg, "job3"})
+	
+	id, err := cron.AddJob("0 1 0 * * ?", testJob{wg, "jobt"})
+	if err != nil {
+		t.Fatalf("Add job failed: %s", err.Error())
+	}
+	if len(cron.entries) != 5 {
+		t.Fatalf("Cron's entries's length not correct, expect: 4, but get: %d", len(cron.entries))
+	}
+	err = cron.RemoveJob(id)
+	if err != nil {
+		t.Fatalf("Remove job %d failed: %s", id, err.Error())
+	}
+	if len(cron.entries) != 4 {
+		t.Fatalf("Cron's entries's length not correct, expect: 3, but get: %d", len(cron.entries))
+	}
 	cron.Schedule(Every(5*time.Second+5*time.Nanosecond), testJob{wg, "job4"})
 	cron.Schedule(Every(5*time.Minute), testJob{wg, "job5"})
 

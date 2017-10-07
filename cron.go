@@ -5,12 +5,14 @@ import (
 	"runtime"
 	"sort"
 	"time"
+	"fmt"
 )
 
 // Cron keeps track of any number of entries, invoking the associated func as
 // specified by the schedule. It may be started, stopped, and the entries may
 // be inspected while running.
 type Cron struct {
+	index int
 	entries  []*Entry
 	stop     chan struct{}
 	add      chan *Entry
@@ -34,6 +36,9 @@ type Schedule interface {
 
 // Entry consists of a schedule and the func to execute on that schedule.
 type Entry struct {
+	// The id of entry
+	id int
+	
 	// The schedule on which this job should be run.
 	Schedule Schedule
 
@@ -76,6 +81,7 @@ func New() *Cron {
 // NewWithLocation returns a new Cron job runner.
 func NewWithLocation(location *time.Location) *Cron {
 	return &Cron{
+		index:    0,
 		entries:  nil,
 		add:      make(chan *Entry),
 		stop:     make(chan struct{}),
@@ -92,32 +98,49 @@ type FuncJob func()
 func (f FuncJob) Run() { f() }
 
 // AddFunc adds a func to the Cron to be run on the given schedule.
-func (c *Cron) AddFunc(spec string, cmd func()) error {
+func (c *Cron) AddFunc(spec string, cmd func()) (int, error) {
 	return c.AddJob(spec, FuncJob(cmd))
 }
 
 // AddJob adds a Job to the Cron to be run on the given schedule.
-func (c *Cron) AddJob(spec string, cmd Job) error {
+func (c *Cron) AddJob(spec string, cmd Job) (id int, err error) {
 	schedule, err := Parse(spec)
 	if err != nil {
-		return err
+		return
 	}
-	c.Schedule(schedule, cmd)
-	return nil
+	id = c.Schedule(schedule, cmd)
+	return
+}
+
+// RemoveJob removes a Job from Cron schedule.
+func (c *Cron) RemoveJob(id int) error {
+	for i, n := 0, len(c.entries); i < n; i++ {
+		//entry := c.entries[i]
+		//if entry.id == id {
+		if c.entries[i].id == id {
+			c.entries = append(c.entries[:i], c.entries[i+1:]...)
+			return nil
+		}
+	}
+	return fmt.Errorf("cannot find job with id: %d", id)
 }
 
 // Schedule adds a Job to the Cron to be run on the given schedule.
-func (c *Cron) Schedule(schedule Schedule, cmd Job) {
+func (c *Cron) Schedule(schedule Schedule, cmd Job) int{
+	// increase the index of cron schedule
+	c.index = c.index + 1
 	entry := &Entry{
+		id : c.index,
 		Schedule: schedule,
 		Job:      cmd,
 	}
 	if !c.running {
 		c.entries = append(c.entries, entry)
-		return
+	} else {
+		c.add <- entry
 	}
-
-	c.add <- entry
+	return entry.id
+	
 }
 
 // Entries returns a snapshot of the cron entries.
